@@ -104,7 +104,8 @@ def load_data():
     "NL": "Nagaland",
     "TR": "Tripura",
     "UC": "Uttarakhand",
-    "AN": "Andaman & Nicobar"
+    "AN": "Andaman & Nicobar",
+    "AR": "Arunachal Pradesh"
 }
 
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])

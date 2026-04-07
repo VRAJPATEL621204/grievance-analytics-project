@@ -19,52 +19,53 @@ st.markdown("""
         font-size: 17px; font-weight: 600; color: #c5cae9;
         margin: 18px 0 8px 0; border-left: 4px solid #5c6bc0; padding-left: 10px;
     }
+    .chart-placeholder {
+        background: #1e2130; border: 1px dashed #2e3250; border-radius: 10px;
+        min-height: 300px; display: flex; align-items: center; justify-content: center;
+        color: #6c7293; font-size: 14px; margin: 4px 0;
+    }
+    .chart-placeholder-sm {
+        background: #1e2130; border: 1px dashed #2e3250; border-radius: 10px;
+        min-height: 220px; display: flex; align-items: center; justify-content: center;
+        color: #6c7293; font-size: 14px; margin: 4px 0;
+    }
     div[data-testid="stSidebar"] { background: #12141f; }
+    /* Force all pyplot containers to never collapse */
+    div[data-testid="stImage"] img { min-height: 200px; }
 </style>
 """, unsafe_allow_html=True)
 
 @st.cache_data
 def load_data():
-    import requests, pandas as pd
-
+    import requests
     url = "https://github.com/VRAJPATEL621204/grievance-analytics-project/releases/download/version/grievance_dataset.json"
-
-    # STREAM download
-    response = requests.get(url, stream=True)
-
+    response = requests.get(url, timeout=120)
     if response.status_code != 200:
-        st.error("Failed to fetch dataset")
+        st.error("Failed to fetch dataset from GitHub releases.")
         st.stop()
-
-    # LOAD JSON safely
-    import json
-    data = json.loads(response.text)  # still needed for GitHub
-
-    # 🔥 FULL DATA (NO LIMIT)
+    data = response.json()
     df = pd.json_normalize(data)
 
-    # -----------------------------
-    # DATE FIX
-    # -----------------------------
     df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce').dt.tz_localize(None)
     df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce').dt.tz_localize(None)
 
-    # -----------------------------
-    # RESOLUTION
-    # -----------------------------
     df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
 
-    # -----------------------------
-    # CATEGORY
-    # -----------------------------
     df['main_category'] = (
         df['subject_content_text'].astype(str)
         .str.split(">>").str[0].str.strip()
     )
+    # Drop rows where category looks like free-form complaint text (not a real category)
+    # Real categories: short, no newlines, don't start with salutations
+    junk_patterns = r'^(dear|respected|sir|madam|to\s|sub:|subject:|i\s|we\s|this\s|please|kindly|my\s|our\s)'
+    df['main_category'] = df['main_category'].where(
+        (df['main_category'].str.len() <= 80) &
+        (~df['main_category'].str.contains('\n', na=True)) &
+        (~df['main_category'].str.lower().str.match(junk_patterns, na=True)),
+        other='Uncategorized'
+    )
+    df = df[df['main_category'] != 'Uncategorized']  # exclude junk from analysis
 
-    # -----------------------------
-    # STATE
-    # -----------------------------
     df['state'] = df['state'].astype(str).str.upper().str.strip()
 
     state_map = {
@@ -110,14 +111,8 @@ def load_data():
 
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 
-    # -----------------------------
-    # DISTRICT
-    # -----------------------------
     df['district_clean'] = df['dist_name']
 
-    # -----------------------------
-    # FINAL CLEAN
-    # -----------------------------
     df = df.dropna(subset=['recvd_date'])
 
     df = df[[
@@ -228,73 +223,92 @@ st.markdown("<br>", unsafe_allow_html=True)
 def section(title):
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
+def placeholder(msg, small=False):
+    cls = "chart-placeholder-sm" if small else "chart-placeholder"
+    st.markdown(f'<div class="{cls}">ℹ️ {msg}</div>', unsafe_allow_html=True)
+
+def make_fig(w, h):
+    fig, ax = plt.subplots(figsize=(w, h))
+    fig.patch.set_facecolor('#1e2130')
+    ax.set_facecolor('#1e2130')
+    return fig, ax
+
+def style_ax(ax):
+    ax.tick_params(colors='#9aa0b4', labelsize=9)
+    for s in ax.spines.values():
+        s.set_edgecolor('#2e3250')
+
 if total == 0:
     st.warning("No data matches the current filters. Please adjust the sidebar filters.")
     st.stop()
 
 # ── Category Bar ─────────────────────────────────────────────────────────────
 cat_counts = fdf['main_category'].value_counts().head(10)
+# Truncate long labels so they never overflow the chart
+cat_counts.index = [l[:40] + '…' if len(l) > 40 else l for l in cat_counts.index]
+
 section("📊 Complaints by Category")
-if len(cat_counts) > 1:
-    fig, ax = plt.subplots(figsize=(12, 5))
-    fig.patch.set_facecolor('#1e2130'); ax.set_facecolor('#1e2130')
+if len(cat_counts) >= 1:
+    n = max(len(cat_counts), 3)
+    fig, ax = make_fig(12, max(n * 0.7, 4))
+    style_ax(ax)
     ax.barh(cat_counts.index[::-1], cat_counts.values[::-1],
             color=sns.color_palette("viridis", len(cat_counts))[::-1])
-    ax.tick_params(colors='#9aa0b4', labelsize=10)
-    for s in ax.spines.values(): s.set_edgecolor('#2e3250')
     ax.set_xlabel("Count", color='#9aa0b4')
-    plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+    # Give enough left margin for long labels
+    plt.subplots_adjust(left=0.35)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 else:
-    st.info("Only one category — bar chart not shown.")
+    placeholder("No category data available.")
 
 # ── Pie Chart ────────────────────────────────────────────────────────────────
 section("🥧 Category Distribution")
 if len(cat_counts) > 2:
-    fig, ax = plt.subplots(figsize=(12, 7))
-    fig.patch.set_facecolor('#1e2130'); ax.set_facecolor('#1e2130')
+    fig, ax = make_fig(12, 7)
+    style_ax(ax)
+    # Use short labels on the pie itself, full in legend
+    short_labels = [l[:25] + '…' if len(l) > 25 else l for l in cat_counts.index]
     wedges, texts, autotexts = ax.pie(
-        cat_counts.values, labels=cat_counts.index,
-        autopct='%1.1f%%', startangle=140, pctdistance=0.82,
-        textprops={'color': '#c5cae9', 'fontsize': 11}
+        cat_counts.values, labels=None,   # no inline labels — use legend only
+        autopct='%1.1f%%', startangle=140, pctdistance=0.75,
+        textprops={'color': '#ffffff', 'fontsize': 10}
     )
-    for at in autotexts: at.set_color('#ffffff'); at.set_fontsize(10)
-    ax.legend(wedges, cat_counts.index, loc="center left",
-              bbox_to_anchor=(1, 0, 0.5, 1), fontsize=10, frameon=False, labelcolor='#9aa0b4')
-    plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+    for at in autotexts:
+        at.set_color('#ffffff'); at.set_fontsize(10)
+    ax.legend(wedges, short_labels, loc="center left",
+              bbox_to_anchor=(1.0, 0.5), fontsize=10, frameon=False, labelcolor='#9aa0b4')
+    plt.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
 else:
-    st.info("Need more than 2 categories for a meaningful pie chart.")
+    placeholder("Need more than 2 categories for a meaningful pie chart.")
 
 # ── Daily Trend + Resolution Histogram ──────────────────────────────────────
 c3, c4 = st.columns(2)
 with c3:
-    section("� Daily Complaint Trend")
+    section("📅 Daily Complaint Trend")
     daily = fdf.groupby(fdf['recvd_date'].dt.date).size()
     if len(daily) > 1:
-        fig, ax = plt.subplots(figsize=(6, 3.5))
-        fig.patch.set_facecolor('#1e2130'); ax.set_facecolor('#1e2130')
+        fig, ax = make_fig(6, 3.5)
+        style_ax(ax)
         ax.plot(daily.index, daily.values, color='#66bb6a', linewidth=1.8)
         ax.fill_between(daily.index, daily.values, alpha=0.15, color='#66bb6a')
-        ax.tick_params(colors='#9aa0b4', labelsize=8)
         plt.xticks(rotation=40, ha='right')
-        for s in ax.spines.values(): s.set_edgecolor('#2e3250')
         ax.set_ylabel("Complaints", color='#9aa0b4')
-        plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+        plt.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
     else:
-        st.info("Not enough date variation for a trend line.")
+        placeholder("Not enough date variation for a trend line.", small=True)
 
 with c4:
     section("⏱️ Resolution Time Distribution")
     res_data = fdf['resolution_days'].dropna()
     if len(res_data) > 0:
-        fig, ax = plt.subplots(figsize=(6, 3.5))
-        fig.patch.set_facecolor('#1e2130'); ax.set_facecolor('#1e2130')
-        ax.hist(res_data, bins=30, color='#ffa726', edgecolor='#1e2130')
-        ax.tick_params(colors='#9aa0b4', labelsize=8)
-        for s in ax.spines.values(): s.set_edgecolor('#2e3250')
+        bins = min(30, max(len(res_data) // 2, 5))
+        fig, ax = make_fig(6, 3.5)
+        style_ax(ax)
+        ax.hist(res_data, bins=bins, color='#ffa726', edgecolor='#1e2130')
         ax.set_xlabel("Days", color='#9aa0b4'); ax.set_ylabel("Count", color='#9aa0b4')
-        plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+        plt.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
     else:
-        st.info("No resolution data available.")
+        placeholder("No resolution data available.", small=True)
 
 # ── Geographic Analysis ──────────────────────────────────────────────────────
 section("📍 Geographic Analysis")
@@ -303,20 +317,22 @@ if sel_state == "All":
     palette = "coolwarm"
 else:
     geo_counts = fdf['district_clean'].value_counts().head(15)
-    geo_counts = geo_counts[~geo_counts.index.isin(['N/A', 'Nan', 'None', ''])]
+    geo_counts = geo_counts[~geo_counts.index.isin(['N/A', 'Nan', 'None', 'nan', ''])]
     palette = "magma"
 
-if len(geo_counts) > 1:
-    fig, ax = plt.subplots(figsize=(10, 4))
-    fig.patch.set_facecolor('#1e2130'); ax.set_facecolor('#1e2130')
+if len(geo_counts) >= 1:
+    n = max(len(geo_counts), 3)
+    # Truncate long district/state names
+    geo_counts.index = [l[:35] + '…' if len(l) > 35 else l for l in geo_counts.index]
+    fig, ax = make_fig(10, max(n * 0.6, 4))
+    style_ax(ax)
     ax.barh(geo_counts.index[::-1], geo_counts.values[::-1],
             color=sns.color_palette(palette, len(geo_counts))[::-1])
-    ax.tick_params(colors='#9aa0b4', labelsize=9)
-    for s in ax.spines.values(): s.set_edgecolor('#2e3250')
     ax.set_xlabel("Complaints", color='#9aa0b4')
-    plt.tight_layout(); st.pyplot(fig); plt.close(fig)
+    plt.subplots_adjust(left=0.35)
+    st.pyplot(fig, use_container_width=True); plt.close(fig)
 else:
-    st.info("Not enough geographic data to display.")
+    placeholder("Not enough geographic data to display.")
 
 # ── Outlier Detection ────────────────────────────────────────────────────────
 section("🚨 Outlier Detection — Extreme Delays (> 50 Days)")

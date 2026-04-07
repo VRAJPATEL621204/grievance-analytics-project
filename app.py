@@ -23,83 +23,60 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Load & Prepare Data ─────────────────────────────────────────────────────
-import requests
-import io
-import ast
-
 @st.cache_data
 def load_data():
+    import requests, io, pandas as pd, ast
+
     url = "https://drive.google.com/uc?id=1kgkksTqxLKEZJ8jkm-KgOrK_i2BFeHXD"
 
-    df = pd.read_csv(url, nrows=200000)
+    response = requests.get(url)
+    data = io.StringIO(response.text)
 
-    st.write("Raw shape:", df.shape)
-    st.write(df.head())
-    st.write("Columns:", df.columns)
-    st.write("Dates sample:")
-    st.write(df[['recvd_date', 'closing_date']].head())
+    df = pd.read_csv(data)
+
     # -----------------------------
-    # 🔧 COLUMN NORMALIZATION
+    # CLEAN COLUMN NAMES
     # -----------------------------
     df.columns = df.columns.str.strip()
 
-    # Force rename (IMPORTANT)
-    df.rename(columns={
-        'recvd_date.$date': 'recvd_date',
-        'closing_date.$date': 'closing_date'
-    }, inplace=True)
+    # -----------------------------
+    # SAFE DATE EXTRACTOR (IMPORTANT)
+    # -----------------------------
+    def extract_date(x):
+        try:
+            if isinstance(x, str) and '$date' in x:
+                return ast.literal_eval(x)['$date']
+            return x
+        except:
+            return None
 
     # -----------------------------
-    # 🔧 SAFE DATE EXTRACTION
+    # APPLY DATE CLEANING
     # -----------------------------
-    def extract_date(col):
-        def safe_parse(x):
-            try:
-                if isinstance(x, str) and '$date' in x:
-                    return ast.literal_eval(x).get('$date')
-                return x
-            except:
-                return None
-        return col.apply(safe_parse)
+    df['recvd_date'] = df['recvd_date'].apply(extract_date)
+    df['closing_date'] = df['closing_date'].apply(extract_date)
 
-    # Apply safely
-    if 'recvd_date' in df.columns:
-        df['recvd_date'] = extract_date(df['recvd_date'])
-        df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
-
-    if 'closing_date' in df.columns:
-        df['closing_date'] = extract_date(df['closing_date'])
-        df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
+    df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
+    df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 
     # -----------------------------
-    # 🔧 RESOLUTION TIME
+    # RESOLUTION DAYS
     # -----------------------------
-    if 'recvd_date' in df.columns and 'closing_date' in df.columns:
-        df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
-        # df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
-    else:
-        df['resolution_days'] = None
+    df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
+    df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
 
     # -----------------------------
-    # 🔧 CATEGORY CLEANING
+    # CATEGORY
     # -----------------------------
-    if 'subject_content_text' in df.columns:
-        df['main_category'] = (
-            df['subject_content_text']
-            .astype(str)
-            .str.split(">>").str[0].str.strip()
-        )
-    else:
-        df['main_category'] = "Unknown"
+    df['main_category'] = (
+        df['subject_content_text'].astype(str)
+        .str.split(">>").str[0].str.strip()
+    )
 
     # -----------------------------
-    # 🔧 STATE CLEANING
+    # STATE CLEAN
     # -----------------------------
-    if 'state' in df.columns:
-        df['state'] = df['state'].astype(str).str.strip().str.upper()
-    else:
-        df['state'] = "Unknown"
+    df['state'] = df['state'].astype(str).str.strip().str.upper()
 
     state_map = {
         "UP": "Uttar Pradesh", "MH": "Maharashtra", "BR": "Bihar",
@@ -107,49 +84,30 @@ def load_data():
         "WB": "West Bengal", "TN": "Tamil Nadu", "HR": "Haryana",
         "PB": "Punjab", "AS": "Assam", "SK": "Sikkim",
         "JH": "Jharkhand", "DL": "Delhi", "LD": "Lakshadweep",
-        "JK": "Jammu & Kashmir", "LK": "Ladakh", "PC": "Puducherry"
+        "JK": "Jammu & Kashmir", "LK": "Ladakh", "PC": "Puducherry",
+        "TG": "Telangana", "OR": "Odisha", "AP": "Andhra Pradesh"
     }
 
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 
     # -----------------------------
-    # 🔧 DISTRICT FIX
+    # FINAL FILTER (IMPORTANT)
     # -----------------------------
-    if 'dist_name' in df.columns:
-        df['district_clean'] = df['dist_name']
-    elif 'district_clean' not in df.columns:
-        df['district_clean'] = "Unknown"
+    df = df.dropna(subset=['recvd_date'])
 
     # -----------------------------
-    # 🔧 SAFE COLUMN SELECTION (FIXED)
+    # KEEP ONLY NEEDED COLUMNS
     # -----------------------------
-    needed_cols = [
+    df = df[[
         'state_full',
         'main_category',
         'resolution_days',
         'recvd_date',
         'closing_date',
-        'district_clean'
-    ]
-    
-    # Ensure all columns exist
-    for col in needed_cols:
-        if col not in df.columns:
-            df[col] = pd.NA
-    
-    df = df[needed_cols]
+        'dist_name'
+    ]]
 
-    # -----------------------------
-    # 🔧 TOP CATEGORIES
-    # -----------------------------
-    if 'main_category' in df.columns:
-        top_cats = df['main_category'].value_counts().head(10).index.tolist()
-    else:
-        top_cats = []
-
-
-
-    st.write("Final shape:", df.shape)
+    top_cats = df['main_category'].value_counts().head(10).index.tolist()
 
     return df, top_cats
 

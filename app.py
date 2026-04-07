@@ -33,6 +33,12 @@ def load_data():
     url = "https://drive.google.com/uc?id=1kgkksTqxLKEZJ8jkm-KgOrK_i2BFeHXD"
 
     df = pd.read_csv(url, nrows=200000)
+
+    st.write("Raw shape:", df.shape)
+    st.write(df.head())
+    st.write("Columns:", df.columns)
+    st.write("Dates sample:")
+    st.write(df[['recvd_date', 'closing_date']].head())
     # -----------------------------
     # 🔧 COLUMN NORMALIZATION
     # -----------------------------
@@ -140,6 +146,10 @@ def load_data():
         top_cats = df['main_category'].value_counts().head(10).index.tolist()
     else:
         top_cats = []
+
+
+
+    st.write("Final shape:", df.shape)
 
     return df, top_cats
 

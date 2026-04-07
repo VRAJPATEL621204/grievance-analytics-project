@@ -38,25 +38,37 @@ def load_data():
 
     # Normalize columns automatically
     import ast
-
+    
+    # Normalize column names
+    df.columns = df.columns.str.strip()
+    
+    # Rename Mongo-style columns if present
+    if 'recvd_date.$date' in df.columns:
+        df.rename(columns={'recvd_date.$date': 'recvd_date'}, inplace=True)
+    
+    if 'closing_date.$date' in df.columns:
+        df.rename(columns={'closing_date.$date': 'closing_date'}, inplace=True)
+    
+    # Safe extractor
     def extract_date(col):
         def safe_parse(x):
             try:
                 if isinstance(x, str) and '$date' in x:
                     return ast.literal_eval(x).get('$date')
                 else:
-                    return None
+                    return x  # already clean
             except:
                 return None
-    
         return col.apply(safe_parse)
-    # Extract actual date strings
-    df['recvd_date'] = extract_date(df['recvd_date'])
-    df['closing_date'] = extract_date(df['closing_date'])
     
-    # Convert to datetime
-    df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
-    df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
+    # Apply extraction ONLY if needed
+    if 'recvd_date' in df.columns:
+        df['recvd_date'] = extract_date(df['recvd_date'])
+        df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
+    
+    if 'closing_date' in df.columns:
+        df['closing_date'] = extract_date(df['closing_date'])
+        df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 
     # Resolution
     df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days

@@ -39,8 +39,35 @@ def load_data():
     # -----------------------------
     df.columns = df.columns.str.strip()
 
+    # DEBUG (TEMP)
+    print("COLUMNS:", df.columns.tolist())
+
     # -----------------------------
-    # SAFE DATE EXTRACTOR (IMPORTANT)
+    # AUTO FIX COLUMN NAMES
+    # -----------------------------
+    col_map = {}
+    for col in df.columns:
+        c = col.lower()
+        if 'recvd' in c:
+            col_map[col] = 'recvd_date'
+        elif 'closing' in c:
+            col_map[col] = 'closing_date'
+        elif 'dist' in c:
+            col_map[col] = 'dist_name'
+
+    df.rename(columns=col_map, inplace=True)
+
+    # -----------------------------
+    # CHECK REQUIRED COLUMNS
+    # -----------------------------
+    required_cols = ['recvd_date', 'closing_date', 'state', 'subject_content_text']
+
+    for col in required_cols:
+        if col not in df.columns:
+            raise Exception(f"Missing column: {col} | Available: {df.columns.tolist()}")
+
+    # -----------------------------
+    # SAFE DATE EXTRACTOR
     # -----------------------------
     def extract_date(x):
         try:
@@ -50,9 +77,6 @@ def load_data():
         except:
             return None
 
-    # -----------------------------
-    # APPLY DATE CLEANING
-    # -----------------------------
     df['recvd_date'] = df['recvd_date'].apply(extract_date)
     df['closing_date'] = df['closing_date'].apply(extract_date)
 
@@ -60,7 +84,7 @@ def load_data():
     df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 
     # -----------------------------
-    # RESOLUTION DAYS
+    # RESOLUTION
     # -----------------------------
     df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
     df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
@@ -91,13 +115,10 @@ def load_data():
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 
     # -----------------------------
-    # FINAL FILTER (IMPORTANT)
+    # FINAL CLEAN
     # -----------------------------
     df = df.dropna(subset=['recvd_date'])
 
-    # -----------------------------
-    # KEEP ONLY NEEDED COLUMNS
-    # -----------------------------
     df = df[[
         'state_full',
         'main_category',

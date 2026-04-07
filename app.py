@@ -27,7 +27,7 @@ st.markdown("""
 def load_data():
     import requests, pandas as pd, json
 
-    url = "https://drive.google.com/uc?id=1kgkksTqxLKEZJ8jkm-KgOrK_i2BFeHXD"
+    url = "https://drive.google.com/uc?id=1CAw_19PI6NCkayzvnJT2XEayJn-1fGvB"
 
     response = requests.get(url)
     data = response.json()   # DIRECT JSON

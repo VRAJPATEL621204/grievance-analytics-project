@@ -25,63 +25,20 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    import requests, io, pandas as pd, ast
+    import requests, pandas as pd, json
 
     url = "https://drive.google.com/uc?id=1kgkksTqxLKEZJ8jkm-KgOrK_i2BFeHXD"
 
     response = requests.get(url)
-    data = io.StringIO(response.text)
+    data = response.json()   # DIRECT JSON
 
-    df = pd.read_csv(data)
-
-    # -----------------------------
-    # CLEAN COLUMN NAMES
-    # -----------------------------
-    df.columns = df.columns.str.strip()
-
-    # DEBUG (TEMP)
-    print("COLUMNS:", df.columns.tolist())
+    df = pd.json_normalize(data)
 
     # -----------------------------
-    # AUTO FIX COLUMN NAMES
+    # DATE FIX (SUPER CLEAN NOW)
     # -----------------------------
-    col_map = {}
-    for col in df.columns:
-        c = col.lower()
-        if 'recvd' in c:
-            col_map[col] = 'recvd_date'
-        elif 'closing' in c:
-            col_map[col] = 'closing_date'
-        elif 'dist' in c:
-            col_map[col] = 'dist_name'
-
-    df.rename(columns=col_map, inplace=True)
-
-    # -----------------------------
-    # CHECK REQUIRED COLUMNS
-    # -----------------------------
-    required_cols = ['recvd_date', 'closing_date', 'state', 'subject_content_text']
-
-    for col in required_cols:
-        if col not in df.columns:
-            raise Exception(f"Missing column: {col} | Available: {df.columns.tolist()}")
-
-    # -----------------------------
-    # SAFE DATE EXTRACTOR
-    # -----------------------------
-    def extract_date(x):
-        try:
-            if isinstance(x, str) and '$date' in x:
-                return ast.literal_eval(x)['$date']
-            return x
-        except:
-            return None
-
-    df['recvd_date'] = df['recvd_date'].apply(extract_date)
-    df['closing_date'] = df['closing_date'].apply(extract_date)
-
-    df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
-    df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
+    df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
+    df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
 
     # -----------------------------
     # RESOLUTION
@@ -115,6 +72,11 @@ def load_data():
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 
     # -----------------------------
+    # DISTRICT
+    # -----------------------------
+    df['district_clean'] = df['dist_name']
+
+    # -----------------------------
     # FINAL CLEAN
     # -----------------------------
     df = df.dropna(subset=['recvd_date'])
@@ -125,13 +87,12 @@ def load_data():
         'resolution_days',
         'recvd_date',
         'closing_date',
-        'dist_name'
+        'district_clean'
     ]]
 
     top_cats = df['main_category'].value_counts().head(10).index.tolist()
 
     return df, top_cats
-
 
 # LOAD DATA
 with st.spinner("Loading data... please wait ⏳"):

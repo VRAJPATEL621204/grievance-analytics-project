@@ -120,7 +120,7 @@ def load_data():
         df['district_clean'] = "Unknown"
 
     # -----------------------------
-    # 🔧 SAFE COLUMN SELECTION
+    # 🔧 SAFE COLUMN SELECTION (FIXED)
     # -----------------------------
     needed_cols = [
         'state_full',
@@ -130,9 +130,13 @@ def load_data():
         'closing_date',
         'district_clean'
     ]
-
-    existing_cols = [col for col in needed_cols if col in df.columns]
-    df = df[existing_cols]
+    
+    # Ensure all columns exist
+    for col in needed_cols:
+        if col not in df.columns:
+            df[col] = pd.NA
+    
+    df = df[needed_cols]
 
     # -----------------------------
     # 🔧 TOP CATEGORIES
@@ -177,8 +181,13 @@ with st.sidebar:
     res_max = min(int(valid_res.max()) if len(valid_res) > 0 else 365, 365)
     res_range = st.slider("⏱️ Resolution Days (max)", 0, res_max, res_max, step=1, key="res_slider")
 
-    ds_min = df['recvd_date'].dropna().min().date()
-    ds_max = df['recvd_date'].dropna().max().date()
+    if 'recvd_date' in df.columns and df['recvd_date'].notna().any():
+        ds_min = df['recvd_date'].dropna().min().date()
+        ds_max = df['recvd_date'].dropna().max().date()
+    else:
+        # fallback to avoid crash
+        ds_min = pd.Timestamp("2023-01-01").date()
+        ds_max = pd.Timestamp("2023-12-31").date()
     date_range = st.date_input(
         "Date Range", value=(ds_min, ds_max),
         min_value=ds_min, max_value=ds_max, key="date_range"

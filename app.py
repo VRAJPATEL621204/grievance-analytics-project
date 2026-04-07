@@ -26,6 +26,7 @@ st.markdown("""
 # ── Load & Prepare Data ─────────────────────────────────────────────────────
 import requests
 import io
+import ast
 
 @st.cache_data
 def load_data():
@@ -34,54 +35,70 @@ def load_data():
     response = requests.get(url)
     data = io.StringIO(response.text)
 
-    df = pd.read_csv(data)
+    # 🔥 LIMIT DATA FOR PERFORMANCE (VERY IMPORTANT)
+    df = pd.read_csv(data, nrows=200000)
 
-    # Normalize columns automatically
-    import ast
-    
-    # Normalize column names
+    # -----------------------------
+    # 🔧 COLUMN NORMALIZATION
+    # -----------------------------
     df.columns = df.columns.str.strip()
-    
-    # Rename Mongo-style columns if present
-    if 'recvd_date.$date' in df.columns:
-        df.rename(columns={'recvd_date.$date': 'recvd_date'}, inplace=True)
-    
-    if 'closing_date.$date' in df.columns:
-        df.rename(columns={'closing_date.$date': 'closing_date'}, inplace=True)
-    
-    # Safe extractor
+
+    # Force rename (IMPORTANT)
+    df.rename(columns={
+        'recvd_date.$date': 'recvd_date',
+        'closing_date.$date': 'closing_date'
+    }, inplace=True)
+
+    # -----------------------------
+    # 🔧 SAFE DATE EXTRACTION
+    # -----------------------------
     def extract_date(col):
         def safe_parse(x):
             try:
                 if isinstance(x, str) and '$date' in x:
                     return ast.literal_eval(x).get('$date')
-                else:
-                    return x  # already clean
+                return x
             except:
                 return None
         return col.apply(safe_parse)
-    
-    # Apply extraction ONLY if needed
+
+    # Apply safely
     if 'recvd_date' in df.columns:
         df['recvd_date'] = extract_date(df['recvd_date'])
         df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
-    
+
     if 'closing_date' in df.columns:
         df['closing_date'] = extract_date(df['closing_date'])
         df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 
-    # Resolution
-    df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
-    df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
+    # -----------------------------
+    # 🔧 RESOLUTION TIME
+    # -----------------------------
+    if 'recvd_date' in df.columns and 'closing_date' in df.columns:
+        df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
+        df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
+    else:
+        df['resolution_days'] = None
 
-    # Category cleanup
-    df['main_category'] = (
-        df['subject_content_text'].astype(str)
-        .str.split(">>").str[0].str.strip()
-    )
+    # -----------------------------
+    # 🔧 CATEGORY CLEANING
+    # -----------------------------
+    if 'subject_content_text' in df.columns:
+        df['main_category'] = (
+            df['subject_content_text']
+            .astype(str)
+            .str.split(">>").str[0].str.strip()
+        )
+    else:
+        df['main_category'] = "Unknown"
 
-    # State cleanup (IMPORTANT — same as before)
-    df['state'] = df['state'].astype(str).str.strip().str.upper()
+    # -----------------------------
+    # 🔧 STATE CLEANING
+    # -----------------------------
+    if 'state' in df.columns:
+        df['state'] = df['state'].astype(str).str.strip().str.upper()
+    else:
+        df['state'] = "Unknown"
 
     state_map = {
         "UP": "Uttar Pradesh", "MH": "Maharashtra", "BR": "Bihar",
@@ -94,21 +111,43 @@ def load_data():
 
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 
-    # Keep only needed columns (IMPORTANT for performance)
-    df = df[[
+    # -----------------------------
+    # 🔧 DISTRICT FIX
+    # -----------------------------
+    if 'dist_name' in df.columns:
+        df['district_clean'] = df['dist_name']
+    elif 'district_clean' not in df.columns:
+        df['district_clean'] = "Unknown"
+
+    # -----------------------------
+    # 🔧 SAFE COLUMN SELECTION
+    # -----------------------------
+    needed_cols = [
         'state_full',
         'main_category',
         'resolution_days',
         'recvd_date',
         'closing_date',
         'district_clean'
-    ]]
+    ]
 
-    top_cats = df['main_category'].value_counts().head(10).index.tolist()
+    existing_cols = [col for col in needed_cols if col in df.columns]
+    df = df[existing_cols]
+
+    # -----------------------------
+    # 🔧 TOP CATEGORIES
+    # -----------------------------
+    if 'main_category' in df.columns:
+        top_cats = df['main_category'].value_counts().head(10).index.tolist()
+    else:
+        top_cats = []
 
     return df, top_cats
 
-df, TOP_CATS = load_data()
+
+# LOAD DATA
+with st.spinner("Loading data... please wait ⏳"):
+    df, TOP_CATS = load_data()
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 with st.sidebar:

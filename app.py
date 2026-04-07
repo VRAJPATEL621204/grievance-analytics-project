@@ -25,31 +25,27 @@ st.markdown("""
 
 @st.cache_data
 def load_data():
-    import requests, pandas as pd, json
+    import requests, pandas as pd
 
     url = "https://github.com/VRAJPATEL621204/grievance-analytics-project/releases/download/version/grievance_dataset.json"
 
-    response = requests.get(url)
+    # STREAM download
+    response = requests.get(url, stream=True)
 
-    # SAFETY CHECK
     if response.status_code != 200:
         st.error("Failed to fetch dataset")
         st.stop()
 
-    # LOAD JSON
-    data = json.loads(response.text)
+    # LOAD JSON safely
+    import json
+    data = json.loads(response.text)  # still needed for GitHub
 
+    # 🔥 FULL DATA (NO LIMIT)
     df = pd.json_normalize(data)
 
-    # ⚠️ PERFORMANCE LIMIT (IMPORTANT)
-    df = df.head(200000)
-
     # -----------------------------
-    # DATE CONVERSION
-    # # -----------------------------
-    # df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
-    # df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
-
+    # DATE FIX
+    # -----------------------------
     df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce').dt.tz_localize(None)
     df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce').dt.tz_localize(None)
 
@@ -67,7 +63,7 @@ def load_data():
     )
 
     # -----------------------------
-    # STATE CLEAN
+    # STATE
     # -----------------------------
     df['state'] = df['state'].astype(str).str.upper().str.strip()
 

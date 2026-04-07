@@ -38,12 +38,18 @@ def load_data():
 
     # Normalize columns automatically
     import ast
-    
+
     def extract_date(col):
-        return col.astype(str).apply(
-            lambda x: ast.literal_eval(x).get('$date') if '$date' in x else None
-        )
+        def safe_parse(x):
+            try:
+                if isinstance(x, str) and '$date' in x:
+                    return ast.literal_eval(x).get('$date')
+                else:
+                    return None
+            except:
+                return None
     
+        return col.apply(safe_parse)
     # Extract actual date strings
     df['recvd_date'] = extract_date(df['recvd_date'])
     df['closing_date'] = extract_date(df['closing_date'])

@@ -32,12 +32,7 @@ import ast
 def load_data():
     url = "https://drive.google.com/uc?id=1kgkksTqxLKEZJ8jkm-KgOrK_i2BFeHXD"
 
-    response = requests.get(url)
-    data = io.StringIO(response.text)
-
-    # 🔥 LIMIT DATA FOR PERFORMANCE (VERY IMPORTANT)
-    df = pd.read_csv(data, nrows=200000)
-
+    df = pd.read_csv(url, nrows=200000)
     # -----------------------------
     # 🔧 COLUMN NORMALIZATION
     # -----------------------------

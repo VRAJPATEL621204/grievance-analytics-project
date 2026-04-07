@@ -68,14 +68,44 @@ def load_data():
     df['state'] = df['state'].astype(str).str.upper().str.strip()
 
     state_map = {
-        "UP": "Uttar Pradesh", "MH": "Maharashtra", "BR": "Bihar",
-        "RJ": "Rajasthan", "MP": "Madhya Pradesh", "GJ": "Gujarat",
-        "WB": "West Bengal", "TN": "Tamil Nadu", "HR": "Haryana",
-        "PB": "Punjab", "AS": "Assam", "SK": "Sikkim",
-        "JH": "Jharkhand", "DL": "Delhi", "LD": "Lakshadweep",
-        "JK": "Jammu & Kashmir", "LK": "Ladakh", "PC": "Puducherry",
-        "TG": "Telangana", "OR": "Odisha", "AP": "Andhra Pradesh"
-    }
+    "UP": "Uttar Pradesh",
+    "MH": "Maharashtra",
+    "BR": "Bihar",
+    "BH": "Bihar",
+    "RJ": "Rajasthan",
+    "MP": "Madhya Pradesh",
+    "GJ": "Gujarat",
+    "WB": "West Bengal",
+    "TN": "Tamil Nadu",
+    "HR": "Haryana",
+    "PB": "Punjab",
+    "AS": "Assam",
+    "SK": "Sikkim",
+    "JH": "Jharkhand",
+    "DL": "Delhi",
+    "LD": "Lakshadweep",
+    "JK": "Jammu & Kashmir",
+    "LK": "Ladakh",
+    "PC": "Puducherry",
+    "TG": "Telangana",
+    "OR": "Odisha",
+    "AP": "Andhra Pradesh",
+    "CG": "Chhattisgarh",
+    "CH": "Chandigarh",
+    "DD": "Daman & Diu",
+    "DN": "Dadra & Nagar Haveli",
+    "GA": "Goa",
+    "HP": "Himachal Pradesh",
+    "KA": "Karnataka",
+    "KL": "Kerala",
+    "MN": "Manipur",
+    "ML": "Meghalaya",
+    "MZ": "Mizoram",
+    "NL": "Nagaland",
+    "TR": "Tripura",
+    "UK": "Uttarakhand",
+    "AN": "Andaman & Nicobar"
+}
 
     df['state_full'] = df['state'].map(state_map).fillna(df['state'])
 

@@ -46,9 +46,12 @@ def load_data():
 
     # -----------------------------
     # DATE CONVERSION
-    # -----------------------------
-    df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
-    df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
+    # # -----------------------------
+    # df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
+    # df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
+
+    df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce').dt.tz_localize(None)
+    df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce').dt.tz_localize(None)
 
     # -----------------------------
     # RESOLUTION
@@ -164,10 +167,10 @@ if set(sel_cats) != set(TOP_CATS):
 
 fdf = fdf[fdf['resolution_days'].fillna(0) <= res_range]
 
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+if isinstance(date_range, tuple) and 'recvd_date' in fdf.columns:
     fdf = fdf[
         (fdf['recvd_date'] >= pd.Timestamp(date_range[0])) &
-        (fdf['recvd_date'] <= pd.Timestamp(date_range[1]) + pd.Timedelta(hours=23, minutes=59))
+        (fdf['recvd_date'] <= pd.Timestamp(date_range[1]) + pd.Timedelta(days=1))
     ]
 
 # ── Header ──────────────────────────────────────────────────────────────────

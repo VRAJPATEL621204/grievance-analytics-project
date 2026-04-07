@@ -37,16 +37,18 @@ def load_data():
     df = pd.read_csv(data)
 
     # Normalize columns automatically
-    df.columns = df.columns.str.strip()
+    import ast
     
-    # Rename if needed
-    if 'recvd_date.$date' in df.columns:
-        df.rename(columns={'recvd_date.$date': 'recvd_date'}, inplace=True)
+    def extract_date(col):
+        return col.astype(str).apply(
+            lambda x: ast.literal_eval(x).get('$date') if '$date' in x else None
+        )
     
-    if 'closing_date.$date' in df.columns:
-        df.rename(columns={'closing_date.$date': 'closing_date'}, inplace=True)
+    # Extract actual date strings
+    df['recvd_date'] = extract_date(df['recvd_date'])
+    df['closing_date'] = extract_date(df['closing_date'])
     
-    # Now safe
+    # Convert to datetime
     df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
     df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 

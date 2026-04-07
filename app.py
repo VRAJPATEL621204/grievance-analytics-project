@@ -36,17 +36,19 @@ def load_data():
 
     df = pd.read_csv(data)
 
-    # Convert dates
-# Handle both possible formats
-    if 'recvd_date' in df.columns:
-        df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
-    elif 'recvd_date.$date' in df.columns:
-        df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
+    # Normalize columns automatically
+    df.columns = df.columns.str.strip()
     
-    if 'closing_date' in df.columns:
-        df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
-    elif 'closing_date.$date' in df.columns:
-        df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
+    # Rename if needed
+    if 'recvd_date.$date' in df.columns:
+        df.rename(columns={'recvd_date.$date': 'recvd_date'}, inplace=True)
+    
+    if 'closing_date.$date' in df.columns:
+        df.rename(columns={'closing_date.$date': 'closing_date'}, inplace=True)
+    
+    # Now safe
+    df['recvd_date'] = pd.to_datetime(df['recvd_date'], errors='coerce')
+    df['closing_date'] = pd.to_datetime(df['closing_date'], errors='coerce')
 
     # Resolution
     df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days

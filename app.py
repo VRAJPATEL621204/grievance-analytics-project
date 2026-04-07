@@ -76,7 +76,7 @@ def load_data():
     # -----------------------------
     if 'recvd_date' in df.columns and 'closing_date' in df.columns:
         df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
-        df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
+        # df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
     else:
         df['resolution_days'] = None
 

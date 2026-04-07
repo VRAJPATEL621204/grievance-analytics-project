@@ -27,15 +27,25 @@ st.markdown("""
 def load_data():
     import requests, pandas as pd, json
 
-    url = "https://drive.google.com/uc?id=1CAw_19PI6NCkayzvnJT2XEayJn-1fGvB"
+    url = "https://github.com/VRAJPATEL621204/grievance-analytics-project/releases/download/version/grievance_dataset.json"
 
     response = requests.get(url)
-    data = response.json()   # DIRECT JSON
+
+    # SAFETY CHECK
+    if response.status_code != 200:
+        st.error("Failed to fetch dataset")
+        st.stop()
+
+    # LOAD JSON
+    data = json.loads(response.text)
 
     df = pd.json_normalize(data)
 
+    # ⚠️ PERFORMANCE LIMIT (IMPORTANT)
+    df = df.head(200000)
+
     # -----------------------------
-    # DATE FIX (SUPER CLEAN NOW)
+    # DATE CONVERSION
     # -----------------------------
     df['recvd_date'] = pd.to_datetime(df['recvd_date.$date'], errors='coerce')
     df['closing_date'] = pd.to_datetime(df['closing_date.$date'], errors='coerce')
@@ -44,7 +54,6 @@ def load_data():
     # RESOLUTION
     # -----------------------------
     df['resolution_days'] = (df['closing_date'] - df['recvd_date']).dt.days
-    df = df[df['resolution_days'].isna() | (df['resolution_days'] >= 0)]
 
     # -----------------------------
     # CATEGORY
@@ -57,7 +66,7 @@ def load_data():
     # -----------------------------
     # STATE CLEAN
     # -----------------------------
-    df['state'] = df['state'].astype(str).str.strip().str.upper()
+    df['state'] = df['state'].astype(str).str.upper().str.strip()
 
     state_map = {
         "UP": "Uttar Pradesh", "MH": "Maharashtra", "BR": "Bihar",
